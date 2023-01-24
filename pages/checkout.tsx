@@ -8,6 +8,9 @@ import Header from "../components/Header";
 import { selectBasketItems, selectBasketTotal } from "../redux/backetSlice";
 import Currency from "react-currency-formatter";
 import { ChevronDownIcon } from "@heroicons/react/outline";
+import Stripe from "stripe";
+import { fetchPostJSON } from "../utils/api-helpers";
+import getStripe from "../utils/get-stripe";
 
 const Checkout = () => {
   const items = useSelector(selectBasketItems);
@@ -16,6 +19,9 @@ const Checkout = () => {
   const [groupedItemsInBasket, setGroupedItemsInBasket] = useState(
     {} as { [key: string]: Product[] }
   );
+
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
     const groupedItems = items.reduce((results, item) => {
       (results[item._id] = results[item._id] || []).push(item);
@@ -24,6 +30,37 @@ const Checkout = () => {
 
     setGroupedItemsInBasket(groupedItems);
   }, [items]);
+
+
+
+  const createCheckoutSession = async () => {
+    setLoading(true);
+
+    const checkoutSession: Stripe.Checkout.Session = await fetchPostJSON(
+      "/api/checkout_sessions",
+      { items: items }
+    );
+
+    // Internal Server Error
+    if ((checkoutSession as any).statucCode === 500) {
+      console.error((checkoutSession as any).message);
+      return;
+    }
+    // Redirect to checkout
+    const stripe = await getStripe();
+    
+    const { error } = await stripe!.redirectToCheckout({
+      sessionId: checkoutSession.id,
+    });
+    console.warn(error.message);
+
+    setLoading(false);
+  };
+
+
+
+
+  
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#e7ecee]">
@@ -124,7 +161,7 @@ const Checkout = () => {
                   </div>
 
                   <div className="flex flex-1 flex-col items-center space-y-8 rounded-xl bg-gray-200 p-8 py-12 md:order-2">
-                    <h4 className="flex-col text-xl mb-4 flex font-semibold">
+                    <h4 className="mb-4 flex flex-col text-xl font-semibold">
                       Pay in full
                       <span>
                         <Currency
@@ -134,9 +171,11 @@ const Checkout = () => {
                       </span>
                     </h4>
                     <Button
+                      loading={loading}
                       noIcon
                       width="w-full"
                       title="Check Out"
+                      onClick={createCheckoutSession}
                     />
                   </div>
                 </div>
